@@ -15,7 +15,7 @@ type RedisEntityRegistrar struct {
     Client *redis.Client
 }
 
-func NewRedisEntityRegistrar(client *redis.Client) *RedisEntityRegistrar {
+func NewRegistrar(client *redis.Client) *RedisEntityRegistrar {
     return &RedisEntityRegistrar{Client: client}
 }
 
