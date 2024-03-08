@@ -10,7 +10,6 @@ import (
     "github.com/go-chi/chi/v5"
     "github.com/dash-xd/logma/internal/entity"
     "github.com/dash-xd/logma/internal/listener"
-    "github.com/dash-xd/logma/internal/publishrequest"
 )
 
 type Subscriber struct {
@@ -37,7 +36,7 @@ func (s *Subscriber) Subscribe(w http.ResponseWriter, r *http.Request) {
     listener := listener.NewListener(requestBody.ChannelName, s.RedisClient)
 
     // Add callback
-    listener.AddCallback(func(message *publishrequest.PublishRequest) error {
+    listener.AddCallback(func(message *PublishRequest) error {
         // Implement callback logic -- todo
     })
 
