@@ -15,7 +15,7 @@ type Listener struct {
     Callbacks   []Callback
 }
 
-func NewListener(channelName string, redisClient *redis.Client) *Listener {
+func NewListener(redisClient *redis.Client, channelName string) *Listener {
     return &Listener{
         ChannelName: channelName,
         RedisClient: redisClient,
