@@ -13,7 +13,6 @@ type BaseEntity struct {
 }
 
 func (e *BaseEntity) Register(client *redis.Client) (string, error) {
-	// Implement registration logic using Redis
 	registrationString := fmt.Sprintf("%s:%d", e.EntityName, e.EntityID)
 	result, err := client.Do(context.Background(), "FCALL", "REGISTER", registrationString).Result()
 	if err != nil {
@@ -23,7 +22,6 @@ func (e *BaseEntity) Register(client *redis.Client) (string, error) {
 }
 
 func (e *BaseEntity) Unregister(client *redis.Client) (string, error) {
-	// Implement unregistration logic using Redis
 	unregistrationString := fmt.Sprintf("%s:%d", e.EntityName, e.EntityID)
 	result, err := client.Do(context.Background(), "FCALL", "UNREGISTER", unregistrationString).Result()
 	if err != nil {
