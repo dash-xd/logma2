@@ -1,30 +1,59 @@
-package app
+package entity
 
 import (
-    "context"
-    "strings"
-  
-    "github.com/redis/go-redis/v9"
+	"context"
+	"fmt"
+	"github.com/redis/go-redis/v9"
 )
 
-type EntityRegistrar interface {
-    Register(args ...string) (string, error)
+type BaseEntity struct {
+	Env        string
+	EntityName string
+	EntityID   int
 }
 
-type RedisEntityRegistrar struct {
-    Client *redis.Client
+func (e *BaseEntity) Register(client *redis.Client) (string, error) {
+	// Implement registration logic using Redis
+	registrationString := fmt.Sprintf("%s:%d", e.EntityName, e.EntityID)
+	result, err := client.Do(context.Background(), "FCALL", "REGISTER", registrationString).Result()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%v", result), nil
 }
 
-func NewRegistrar(client *redis.Client) *RedisEntityRegistrar {
-    return &RedisEntityRegistrar{Client: client}
+func (e *BaseEntity) Unregister(client *redis.Client) (string, error) {
+	// Implement unregistration logic using Redis
+	unregistrationString := fmt.Sprintf("%s:%d", e.EntityName, e.EntityID)
+	result, err := client.Do(context.Background(), "FCALL", "UNREGISTER", unregistrationString).Result()
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%v", result), nil
 }
 
-func (r *RedisEntityRegistrar) Register(args ...string) (string, error) {
-    result, err := r.Client.Do(context.Background(), append("FCALL", args...)).Result()
-    if err != nil {
-        return "", err
-    }
-    
-    key := strings.TrimSpace(result.(string))
-    return key, nil
+type Entity struct {
+	BaseEntity
+	ParentNamespace string
+	ChildNamespace  string
+}
+
+type ActiveSubscription struct {
+	Entity
+}
+
+type SavedSubscription struct {
+	Entity
+}
+
+func DefaultEntity(env string, entityName string, entityID int) Entity {
+	return Entity{
+		BaseEntity: BaseEntity{
+			Env:        env,
+			EntityName: entityName,
+			EntityID:   entityID,
+		},
+		ParentNamespace: "myOrg",
+		ChildNamespace:  "global",
+	}
 }
