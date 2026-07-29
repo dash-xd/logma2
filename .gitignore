@@ -19,3 +19,15 @@
 
 # Go workspace file
 go.work
+
+# Terraform
+**/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+.build/
+crash.log
+crash.*.log
+*.tfvars
+*.tfvars.json

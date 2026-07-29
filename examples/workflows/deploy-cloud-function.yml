@@ -1,0 +1,52 @@
+# Example workflow for a SEPARATE, private repository that consumes the
+# composite action defined in dash-xd/logma2/.github/actions/deploy-gcf-gen1.
+#
+# This file is illustrative only: it is not wired into logma2's own
+# .github/workflows (hence it lives under examples/, not .github/workflows),
+# and none of the <ANGLE_BRACKET> placeholders below are real values.
+# Copy it into the consuming repo's .github/workflows/, fill in the
+# placeholders, and pin the `uses:` ref to a tag or commit SHA instead of
+# a branch before running it in production.
+
+name: Deploy Cloud Function
+
+on:
+  push:
+    branches: [<DEPLOY_BRANCH>]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Production (huram-abi) decrypts the GCP service account key
+      # through our bootstrapped sops-age setup. Swap in whatever
+      # invocation that bootstrap actually exposes -- this is just the
+      # shape the deploy step below expects: a step output holding the
+      # decrypted JSON key contents.
+      - name: Decrypt GCP service account key (sops + age)
+        id: sops
+        env:
+          SOPS_AGE_KEY: <SOPS_AGE_PRIVATE_KEY>
+        run: |
+          {
+            echo 'gcp_credentials_json<<SOPS_EOF'
+            sops --decrypt <PATH_TO_ENCRYPTED_SERVICE_ACCOUNT_JSON>
+            echo 'SOPS_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Deploy Cloud Function
+        uses: dash-xd/logma2/.github/actions/deploy-gcf-gen1@main
+        with:
+          gcp_project_id: <GCP_PROJECT_ID>
+          gcp_region: <GCP_REGION>
+          gcp_credentials_json: ${{ steps.sops.outputs.gcp_credentials_json }}
+          function_name: <FUNCTION_NAME>
+          entry_point: Function
+          source_dir: <PATH_TO_GO_FUNCTION_SOURCE>
+          source_bucket_name: <GCS_SOURCE_BUCKET>
+          tf_state_bucket: <TF_STATE_BUCKET>
+          environment_variables: >-
+            {"REDIS_URI":"<REDIS_URI>","REDIS_PASSWORD":"<REDIS_PASSWORD>"}

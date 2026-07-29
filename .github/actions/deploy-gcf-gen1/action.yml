@@ -1,0 +1,135 @@
+name: 'Deploy Google Cloud Function (Gen 1, Go)'
+description: >
+  Deploys a Go-runtime Google Cloud Function (1st gen) with Terraform,
+  at minimum spec (128MB memory, single instance). Authenticates with a
+  GCP service account JSON key that the calling workflow supplies
+  already decrypted -- this action never decrypts secrets itself.
+author: 'dash-xd'
+
+inputs:
+  gcp_project_id:
+    description: 'Target GCP project ID.'
+    required: true
+  gcp_region:
+    description: 'Region to deploy the function and its source bucket into.'
+    required: true
+  gcp_credentials_json:
+    description: >
+      Contents of the GCP service account JSON key used to authenticate,
+      e.g. decrypted via your sops-age setup in a prior step.
+    required: true
+  function_name:
+    description: 'Name of the Cloud Function to create/update.'
+    required: true
+  entry_point:
+    description: 'Exported Go function name Cloud Functions should invoke.'
+    required: true
+  source_dir:
+    description: 'Path (relative to the calling repo checkout) to the Go function source.'
+    required: true
+  source_bucket_name:
+    description: 'GCS bucket to hold the function source archive. Created if it does not exist.'
+    required: true
+  tf_state_bucket:
+    description: 'GCS bucket used for the Terraform remote state backend.'
+    required: true
+  tf_state_prefix:
+    description: 'Prefix/path within the state bucket for this function''s state.'
+    required: false
+    default: 'cloud-functions'
+  runtime:
+    description: 'Cloud Functions (1st gen) Go runtime identifier.'
+    required: false
+    default: 'go121'
+  available_memory_mb:
+    description: 'Memory allocated to the function, in MB (128 is the Gen 1 minimum).'
+    required: false
+    default: '128'
+  timeout_seconds:
+    description: 'Function timeout, in seconds.'
+    required: false
+    default: '60'
+  max_instances:
+    description: 'Maximum concurrent instances.'
+    required: false
+    default: '1'
+  allow_unauthenticated:
+    description: 'Whether to allow unauthenticated (public) HTTP invocations.'
+    required: false
+    default: 'false'
+  environment_variables:
+    description: 'JSON object of environment variables to set on the function, e.g. {"REDIS_URI":"..."}.'
+    required: false
+    default: '{}'
+  terraform_action:
+    description: 'Terraform action to run after plan: "apply" or "plan" (plan-only, no changes applied).'
+    required: false
+    default: 'apply'
+
+outputs:
+  function_url:
+    description: 'HTTPS trigger URL of the deployed function.'
+    value: ${{ steps.tf-output.outputs.function_url }}
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Write GCP credentials
+      shell: bash
+      run: |
+        umask 077
+        printf '%s' '${{ inputs.gcp_credentials_json }}' > "${RUNNER_TEMP}/gcp-credentials.json"
+
+    - name: Setup Terraform
+      uses: hashicorp/setup-terraform@v3
+      with:
+        terraform_version: '1.7.5'
+
+    - name: Terraform init
+      shell: bash
+      working-directory: ${{ github.action_path }}/terraform
+      run: |
+        terraform init -input=false \
+          -backend-config="bucket=${{ inputs.tf_state_bucket }}" \
+          -backend-config="prefix=${{ inputs.tf_state_prefix }}/${{ inputs.function_name }}"
+
+    - name: Terraform plan
+      shell: bash
+      working-directory: ${{ github.action_path }}/terraform
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-credentials.json
+      run: |
+        terraform plan -input=false -out=tfplan \
+          -var="project_id=${{ inputs.gcp_project_id }}" \
+          -var="region=${{ inputs.gcp_region }}" \
+          -var="function_name=${{ inputs.function_name }}" \
+          -var="entry_point=${{ inputs.entry_point }}" \
+          -var="source_dir=${{ github.workspace }}/${{ inputs.source_dir }}" \
+          -var="source_bucket_name=${{ inputs.source_bucket_name }}" \
+          -var="runtime=${{ inputs.runtime }}" \
+          -var="available_memory_mb=${{ inputs.available_memory_mb }}" \
+          -var="timeout_seconds=${{ inputs.timeout_seconds }}" \
+          -var="max_instances=${{ inputs.max_instances }}" \
+          -var="allow_unauthenticated=${{ inputs.allow_unauthenticated }}" \
+          -var="environment_variables=${{ inputs.environment_variables }}"
+
+    - name: Terraform apply
+      if: inputs.terraform_action == 'apply'
+      shell: bash
+      working-directory: ${{ github.action_path }}/terraform
+      env:
+        GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/gcp-credentials.json
+      run: terraform apply -input=false -auto-approve tfplan
+
+    - name: Terraform output
+      id: tf-output
+      if: inputs.terraform_action == 'apply'
+      shell: bash
+      working-directory: ${{ github.action_path }}/terraform
+      run: |
+        echo "function_url=$(terraform output -raw function_url 2>/dev/null || true)" >> "$GITHUB_OUTPUT"
+
+    - name: Clean up credentials
+      if: always()
+      shell: bash
+      run: rm -f "${RUNNER_TEMP}/gcp-credentials.json"
